@@ -1,0 +1,15 @@
+INFO: 97, 98, 99, 100, 151, 104, 0, 0, 216, 175, 243, 23v
+
+
+
+
+Parsed MSG:
+code: 151, ncode: 104, size: 0
+ready to parse
+id: 56 255 217 5 77 89 53 50 97 87 18 67
+cpu: 268502040
+flash size: 128
+sfu ver: 256
+rx buf: 2048
+msf: 134256640
+mrf: 134258688
