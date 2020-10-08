@@ -166,7 +166,7 @@ if connection:
                 print('crc not matched')
                 return None
 
-            print('Размер телф команды: {0}'.format(len(body)))
+            print('Размер тела команды: {0}'.format(len(body)))
 
             if command == 0x97:
                 print('Получен ответ на запос информации')
