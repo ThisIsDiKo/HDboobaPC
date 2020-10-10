@@ -88,6 +88,7 @@ def serialize_crc(crc):
 
 if connection:
     buf = [0x97, 0x68, 0x00, 0x00]
+    buf = [0x38, 0xc7, 0x14, 0x00, 0x00, 0xa0, 0x00, 0x08, 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]
     #buf = [170, 85, 16, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
     generate_crc32_table(poly)
 
