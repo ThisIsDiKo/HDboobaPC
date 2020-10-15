@@ -6,6 +6,7 @@ import serial.tools.list_ports_windows as comPortList
 import queue
 import io
 import shutil
+from hdboobaModel import HDBoobaModel
 
 from datetime import datetime, date, time
 
@@ -20,6 +21,8 @@ class ComboBox(QComboBox):
 class MainWindow(QWidget):
     def __init__(self):
         QWidget.__init__(self)
+
+        self.mcu_model = HDBoobaModel()
 
         self.debugQueue = queue.Queue()
         self.monitorQueue = queue.Queue()
@@ -99,6 +102,16 @@ class MainWindow(QWidget):
                     if 'type' in s.keys():
                         print('got correct answer: {0}'.format(s['type']))
                         if s['type'] == 'info':
+
+                            self.mcu_model.start_address = s['Memory Addr']
+                            self.mcu_model.bootloader_version = s['Version']
+                            self.mcu_model.flash_size = s['Flash Size'] * 1024
+
+                            if s['Rec Buf Size'] > 1030:
+                                self.mcu_model.increment_address = 1024
+                            else:
+                                self.mcu_model.increment_address = 512
+
                             msg_to_show += 'Получен пакет с информацией об устройстве\n'
                             msg_to_show += 'UID: {0}\n'.format(s['UID'])
                             msg_to_show += 'Dev ID: {0}\tRev ID: {1}\n'.format(hex(s['Dev ID']), hex(s['Rev ID']))
@@ -179,6 +192,10 @@ class MainWindow(QWidget):
         self.monitorTextField.insertPlainText(text)
 
     def array_prepare(self):
+        f = open('HDBooba.bin', 'rb')
+        bin_data = f.read()
+        print(bin_data[:32])
+        print('file length: {0}'.format(len(bin_data)))
         val = [i for i in range(8191)]
         o = [serialize_32bit(i) for i in val]
         byte_array = []
@@ -186,7 +203,8 @@ class MainWindow(QWidget):
             for byte in p:
                 byte_array.append(byte)
         p = []
-
+        byte_array = list(bin_data)
+        print(byte_array[:32])
         print('len before append: {0} {1}'.format(len(byte_array), int(len(byte_array) / 1024)))
         if int(len(byte_array) / 1024) != 0:
             ness_number_of_bytes = (int(len(byte_array) / 1024))*1024 + 1024 - len(byte_array)
@@ -201,7 +219,7 @@ class MainWindow(QWidget):
             d = {}
             d['packet'] = temp.copy()
             d['crc'] = serialize_32bit(custom_crc32(temp))
-            print(d['crc'])
+            #print(d['crc'])
 
 
 
