@@ -23,6 +23,7 @@ class MainWindow(QWidget):
         QWidget.__init__(self)
 
         self.mcu_model = HDBoobaModel()
+        self.firmware_dict = None
 
         self.debugQueue = queue.Queue()
         self.monitorQueue = queue.Queue()
@@ -112,6 +113,8 @@ class MainWindow(QWidget):
                             else:
                                 self.mcu_model.increment_address = 512
 
+                            self.mcu_model.current_step = 'got info'
+
                             msg_to_show += 'Получен пакет с информацией об устройстве\n'
                             msg_to_show += 'UID: {0}\n'.format(s['UID'])
                             msg_to_show += 'Dev ID: {0}\tRev ID: {1}\n'.format(hex(s['Dev ID']), hex(s['Rev ID']))
@@ -121,12 +124,19 @@ class MainWindow(QWidget):
                             msg_to_show += 'Адрес начала флеш: {0}\n'.format(hex(s['Memory Addr']))
                             msg_to_show += 'Адрес начала программы: {0}\n'.format(hex(s['Programm Addr']))
                             self.print_debug_text(msg_to_show)
+
+                            self.array_prepare()
+                            self.send_page_packet()
+
                         elif s['type'] == 'erase':
                             msg_to_show += 'Получен пакет с информацией об очистке флеш памяти\n'
                             msg_to_show += 'Размер ответа: {0}\n'.format(s['size'])
                             if s['size'] > 0:
                                 msg_to_show += 'Очищено место для: {0} байт\n'.format(deserialize_32bit(s['erased bytes'])[0])
                             self.print_debug_text(msg_to_show)
+                        elif s['type'] == 'write':
+                            if s['address'] == self.mcu_model.current_address:
+
 
 
         except:
@@ -160,7 +170,13 @@ class MainWindow(QWidget):
         pass
 
     def onclick_erase(self):
-        msg = [197, 58, 4, 0, 0x00, 0x80, 0x00, 0x00]
+        if self.mcu_model.start_address != 0:
+            if self.firmware_dict:
+                serialized_firmware_size = serialize_32bit(self.firmware_dict['firmware size'])
+                msg = [197, 58, 4, 0]
+                msg.extend(serialized_firmware_size)
+            else:
+                msg = [197, 58, 4, 0, 0x00, 0x00, 0x00, 0x00]
         msg = add_preamb_and_crc(msg)
         self.send_buf(msg)
         pass
@@ -191,35 +207,65 @@ class MainWindow(QWidget):
         self.monitorTextField.moveCursor(QTextCursor.End)
         self.monitorTextField.insertPlainText(text)
 
+    def send_page_packet(self):
+        print('{0} {1}< {2} {3}'.format(self.firmware_dict['current page'], type(self.firmware_dict['current page']),
+                                        self.firmware_dict['total pages'], type(self.firmware_dict['total pages'])))
+        print('hello')
+        msg = [0x38, 0xc7]
+        print('hello')
+        print('page size: {0}'.format(self.firmware_dict['page size']))
+        packet_len = serialize_16bit(self.firmware_dict['page size'] + 4)
+        print('packet len: {0}'.format(packet_len))
+        addr_ser = serialize_32bit(
+            self.firmware_dict['pages'][self.firmware_dict['current page']]['page start address'])
+        print('ser address: {0}'.format(addr_ser))
+        msg.extend(packet_len)
+        msg.extend(addr_ser)
+        msg.extend(self.firmware_dict['pages'][self.firmware_dict['current page']]['page'])
+        print(len(msg), msg)
+
+
+
     def array_prepare(self):
-        f = open('HDBooba.bin', 'rb')
+        try:
+            f = open('demo.bin', 'rb')
+        except:
+            print('error opening file')
+            return
         bin_data = f.read()
         print(bin_data[:32])
         print('file length: {0}'.format(len(bin_data)))
-        val = [i for i in range(8191)]
-        o = [serialize_32bit(i) for i in val]
-        byte_array = []
-        for p in o:
-            for byte in p:
-                byte_array.append(byte)
-        p = []
         byte_array = list(bin_data)
-        print(byte_array[:32])
-        print('len before append: {0} {1}'.format(len(byte_array), int(len(byte_array) / 1024)))
+
+        self.firmware_dict = dict()
+        self.firmware_dict['page size'] = 1024
+        self.firmware_dict['current page'] = 0
+        self.firmware_dict['pages'] = list()
+
+
         if int(len(byte_array) / 1024) != 0:
             ness_number_of_bytes = (int(len(byte_array) / 1024))*1024 + 1024 - len(byte_array)
-            print('Не хватает {0}'.format(ness_number_of_bytes))
             for i in range(ness_number_of_bytes):
                 byte_array.append(0)
 
-        print('len after append: {0}'.format(len(byte_array)))
-        for i in range(0, len(byte_array), 1024):
-            temp = byte_array[i:i+1024]
-            #print(temp)
-            d = {}
-            d['packet'] = temp.copy()
-            d['crc'] = serialize_32bit(custom_crc32(temp))
-            #print(d['crc'])
+        self.firmware_dict['crc'] = custom_crc32(byte_array)
+        self.firmware_dict['firmware size'] = len(byte_array)
+        self.firmware_dict['total pages'] = int(self.firmware_dict['firmware size'] / self.firmware_dict['page size'])
+
+
+        for i in range(0, len(byte_array), self.firmware_dict['page size']):
+            temp = byte_array[i:i+self.firmware_dict['page size']]
+            d = dict()
+            d['page id'] = int(i / self.firmware_dict['page size'])
+            d['page start address'] = int(i / self.firmware_dict['page size']) * self.firmware_dict['page size'] + self.mcu_model.start_address
+            d['page'] = temp.copy()
+
+            self.firmware_dict['pages'].append(d.copy())
+
+        print('num of pages: {0}'.format(len(self.firmware_dict['pages'])))
+        for pageInfo in self.firmware_dict['pages']:
+            print('{0} --> {1}: {2}'.format(pageInfo['page id'], hex(pageInfo['page start address']), pageInfo['page'][:20]))
+
 
 
 

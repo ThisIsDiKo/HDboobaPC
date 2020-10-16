@@ -10,6 +10,15 @@ def serialize_32bit(number, order='little-endian'):
     else:
         return [b4, b3, b2, b1]
 
+def serialize_16bit(number, order='little-endian'):
+    b2 = (number & 0x0000FF00) >> 8
+    b1 = (number & 0x000000FF)
+
+    if order == 'little-endian':
+        return [b1, b2]
+    else:
+        return [b2, b1]
+
 def deserialize_32bit(buf, order='little-endian'):
     if len(buf) % 4 != 0:
         return None
@@ -154,6 +163,11 @@ def parse_msg(msg):
             result['size'] = param_len
             if param_len > 0:
                 result['erased bytes'] = body[:4]
+        elif command == 0x38:
+            result['type'] = 'write'
+            result['size'] = param_len
+            if param_len > 0:
+                result['address'] = deserialize_32bit(body[:4])[0]
         else:
             result['type'] = 'unknown command'
             print('Получена неизвестная команда')
