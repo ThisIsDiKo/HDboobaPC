@@ -43,6 +43,10 @@ class MainWindow(QWidget):
         self.btnInfo.clicked.connect(self.onclick_info)
         self.btnErase = QPushButton("Очистить флеш")
         self.btnErase.clicked.connect(self.onclick_erase)
+        self.btnWrite = QPushButton("Запись демо во флеш")
+        self.btnWrite.clicked.connect(self.onclick_write)
+        self.btnCheckCRC = QPushButton("Проверка прошивки")
+        self.btnCheckCRC.clicked.connect(self.onclick_check_crc)
 
 
         self.comPortLayout = QHBoxLayout()
@@ -56,6 +60,8 @@ class MainWindow(QWidget):
         self.btnsLayout = QHBoxLayout()
         self.btnsLayout.addWidget(self.btnInfo)
         self.btnsLayout.addWidget(self.btnErase)
+        self.btnsLayout.addWidget(self.btnWrite)
+        self.btnsLayout.addWidget(self.btnCheckCRC)
 
 
         self.mainLayout = QVBoxLayout()
@@ -126,7 +132,7 @@ class MainWindow(QWidget):
                             self.print_debug_text(msg_to_show)
 
                             self.array_prepare()
-                            self.send_page_packet()
+                            #self.send_page_packet()
 
                         elif s['type'] == 'erase':
                             msg_to_show += 'Получен пакет с информацией об очистке флеш памяти\n'
@@ -135,12 +141,48 @@ class MainWindow(QWidget):
                                 msg_to_show += 'Очищено место для: {0} байт\n'.format(deserialize_32bit(s['erased bytes'])[0])
                             self.print_debug_text(msg_to_show)
                         elif s['type'] == 'write':
-                            if s['address'] == self.mcu_model.current_address:
+                            msg_to_show += 'Получен пакет с информацией о записи во флеш\n'
+                            if s['size'] > 0:
+                                if s['address'] == self.mcu_model.current_address:
+                                    msg_to_show += 'Произведена запись страницы {0} по адресу {1}\n'.format(\
+                                        self.firmware_dict['current page'], hex(s['address']))
+
+                                    self.print_debug_text(msg_to_show)
+                                    self.firmware_dict['current page'] += 1
+                                    self.send_page_packet()
+                                else:
+                                    msg_to_show += 'Адреса страниц не совпали {0} получено {1}\n'.format(
+                                        hex(self.mcu_model.current_address), hex(s['address']))
+                                    self.print_debug_text(msg_to_show)
+                        elif s['type'] == 'crc check':
+                            msg_to_show += 'Получен информация о проверке контрольной суммы\n'
+                            if s['size'] > 0:
+                                if s['crc'] == self.firmware_dict['crc']:
+                                    msg_to_show += 'Контрольные суммы совпадают {0} {1}\n'.format(
+                                        s['crc'], self.firmware_dict['crc'])
+                                else:
+                                    msg_to_show += 'Контрольные суммы не совпадают {0} {1}\n'.format(
+                                        s['crc'], self.firmware_dict['crc'])
+                            self.print_debug_text(msg_to_show)
+
 
 
 
         except:
             pass
+
+    def onclick_write(self):
+        if self.mcu_model.current_step == 'got info':
+            self.firmware_dict['current page'] = 0
+            self.send_page_packet()
+
+    def onclick_check_crc(self):
+        if self.mcu_model.current_step == 'got info':
+            msg = [0x33, 0xcc, 4, 0]
+            f_size = serialize_32bit(self.firmware_dict['firmware size'])
+            msg.extend(f_size)
+            msg = add_preamb_and_crc(msg)
+            self.send_buf(msg)
 
     def onclick_connect(self):
         portName = self.cboxComPort.currentText()
@@ -208,22 +250,19 @@ class MainWindow(QWidget):
         self.monitorTextField.insertPlainText(text)
 
     def send_page_packet(self):
-        print('{0} {1}< {2} {3}'.format(self.firmware_dict['current page'], type(self.firmware_dict['current page']),
-                                        self.firmware_dict['total pages'], type(self.firmware_dict['total pages'])))
-        print('hello')
-        msg = [0x38, 0xc7]
-        print('hello')
-        print('page size: {0}'.format(self.firmware_dict['page size']))
-        packet_len = serialize_16bit(self.firmware_dict['page size'] + 4)
-        print('packet len: {0}'.format(packet_len))
-        addr_ser = serialize_32bit(
-            self.firmware_dict['pages'][self.firmware_dict['current page']]['page start address'])
-        print('ser address: {0}'.format(addr_ser))
-        msg.extend(packet_len)
-        msg.extend(addr_ser)
-        msg.extend(self.firmware_dict['pages'][self.firmware_dict['current page']]['page'])
-        print(len(msg), msg)
-
+        if self.firmware_dict['current page'] < self.firmware_dict['total pages']:
+            msg = [0x38, 0xc7]
+            packet_len = serialize_16bit(self.firmware_dict['page size'] + 4)
+            self.mcu_model.current_address = self.firmware_dict['pages'][self.firmware_dict['current page']]['page start address']
+            addr_ser = serialize_32bit(self.mcu_model.current_address)
+            msg.extend(packet_len)
+            msg.extend(addr_ser)
+            msg.extend(self.firmware_dict['pages'][self.firmware_dict['current page']]['page'])
+            msg = add_preamb_and_crc(msg)
+            print(msg)
+            self.send_buf(msg, debug=False)
+        else:
+            self.print_debug_text('Был отправлен последний пакет')
 
 
     def array_prepare(self):
@@ -251,7 +290,7 @@ class MainWindow(QWidget):
         self.firmware_dict['crc'] = custom_crc32(byte_array)
         self.firmware_dict['firmware size'] = len(byte_array)
         self.firmware_dict['total pages'] = int(self.firmware_dict['firmware size'] / self.firmware_dict['page size'])
-
+        self.firmware_dict['crc'] = custom_crc32(byte_array)
 
         for i in range(0, len(byte_array), self.firmware_dict['page size']):
             temp = byte_array[i:i+self.firmware_dict['page size']]
@@ -265,9 +304,15 @@ class MainWindow(QWidget):
         print('num of pages: {0}'.format(len(self.firmware_dict['pages'])))
         for pageInfo in self.firmware_dict['pages']:
             print('{0} --> {1}: {2}'.format(pageInfo['page id'], hex(pageInfo['page start address']), pageInfo['page'][:20]))
+        print('crc is {0}'.format(self.firmware_dict['crc']))
 
-
-
+    def closeEvent(self, QCloseEvent):
+        print('close event activated')
+        if self.monitorThread:
+            # com_port = self.monitorThread.get_serial_port()
+            # if com_port:
+            #     com_port.close()
+            self.monitorThread.stop()
 
 if __name__ == '__main__':
     import sys

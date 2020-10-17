@@ -168,6 +168,11 @@ def parse_msg(msg):
             result['size'] = param_len
             if param_len > 0:
                 result['address'] = deserialize_32bit(body[:4])[0]
+        elif command == 0x33:
+            result['type'] = 'crc check'
+            result['size'] = param_len
+            if param_len > 0:
+                result['crc'] = deserialize_32bit(body[:4])[0]
         else:
             result['type'] = 'unknown command'
             print('Получена неизвестная команда')

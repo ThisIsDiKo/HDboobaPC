@@ -29,6 +29,9 @@ class ComMonitorThread(threading.Thread):
         self.running = True
         self.incoming_array = []
 
+    def get_serial_port(self):
+        return self.serial_port
+
     def run(self):
         msg = ""
         try:
@@ -46,25 +49,25 @@ class ComMonitorThread(threading.Thread):
             return
 
         while self.running:
-            new_data = self.serial_port.read(1)
-            if new_data:
-                #print(new_data, end='\t')
-                self.monitorQueue.put(new_data)
-                self.incoming_array.append(int.from_bytes(new_data, 'big'))
-                #print('put byte {0}'.format(int.from_bytes(new_data, 'big')), end='\t')
-                result = parse_msg(self.incoming_array)
-                if result:
-                    self.debugQueue.put(result)
-                    if result['type'] == 'crc error':
-                        self.incoming_array = self.incoming_array[result['endIndex'] + 1:]
-                    else:
-                        self.incoming_array = self.incoming_array[result['endIndex'] + 1:]
-            else:
-                self.incoming_array = []
-            # try:
-            #
-            # except:
-            #     print("unexpected byte")
+
+            try:
+                new_data = self.serial_port.read(1)
+                if new_data:
+                    # print(new_data, end='\t')
+                    self.monitorQueue.put(new_data)
+                    self.incoming_array.append(int.from_bytes(new_data, 'big'))
+                    # print('put byte {0}'.format(int.from_bytes(new_data, 'big')), end='\t')
+                    result = parse_msg(self.incoming_array)
+                    if result:
+                        self.debugQueue.put(result)
+                        if result['type'] == 'crc error':
+                            self.incoming_array = self.incoming_array[result['endIndex'] + 1:]
+                        else:
+                            self.incoming_array = self.incoming_array[result['endIndex'] + 1:]
+                else:
+                    self.incoming_array = []
+            except:
+                print("unexpected byte")
 
 
         if self.serial_port:
