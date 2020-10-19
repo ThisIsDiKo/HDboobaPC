@@ -47,6 +47,8 @@ class MainWindow(QWidget):
         self.btnWrite.clicked.connect(self.onclick_write)
         self.btnCheckCRC = QPushButton("Проверка прошивки")
         self.btnCheckCRC.clicked.connect(self.onclick_check_crc)
+        self.btnStart = QPushButton("Старт прошивки")
+        self.btnStart.clicked.connect(self.onclick_start)
 
 
         self.comPortLayout = QHBoxLayout()
@@ -62,6 +64,7 @@ class MainWindow(QWidget):
         self.btnsLayout.addWidget(self.btnErase)
         self.btnsLayout.addWidget(self.btnWrite)
         self.btnsLayout.addWidget(self.btnCheckCRC)
+        self.btnsLayout.addWidget(self.btnStart)
 
 
         self.mainLayout = QVBoxLayout()
@@ -176,6 +179,12 @@ class MainWindow(QWidget):
             self.firmware_dict['current page'] = 0
             self.send_page_packet()
 
+    def onclick_start(self):
+        if self.mcu_model.current_step == 'got info':
+            msg = [0x26, 0xD9, 0, 0]
+            msg = add_preamb_and_crc(msg)
+            self.send_buf(msg)
+
     def onclick_check_crc(self):
         if self.mcu_model.current_step == 'got info':
             msg = [0x33, 0xcc, 4, 0]
@@ -267,7 +276,7 @@ class MainWindow(QWidget):
 
     def array_prepare(self):
         try:
-            f = open('demo.bin', 'rb')
+            f = open('led_test_new.bin', 'rb')
         except:
             print('error opening file')
             return
@@ -306,13 +315,13 @@ class MainWindow(QWidget):
             print('{0} --> {1}: {2}'.format(pageInfo['page id'], hex(pageInfo['page start address']), pageInfo['page'][:20]))
         print('crc is {0}'.format(self.firmware_dict['crc']))
 
-    def closeEvent(self, QCloseEvent):
-        print('close event activated')
-        if self.monitorThread:
-            # com_port = self.monitorThread.get_serial_port()
-            # if com_port:
-            #     com_port.close()
-            self.monitorThread.stop()
+    # def closeEvent(self, QCloseEvent):
+    #     print('close event activated')
+    #     if self.monitorThread:
+    #         # com_port = self.monitorThread.get_serial_port()
+    #         # if com_port:
+    #         #     com_port.close()
+    #         self.monitorThread.stop()
 
 if __name__ == '__main__':
     import sys
